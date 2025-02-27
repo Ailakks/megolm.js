@@ -3,6 +3,8 @@
 
 import * as base64js from 'base64-js';
 
+const crypto = require("crypto");
+
 // Megolm constants, must keep them in sync with libolm.
 //
 
@@ -53,7 +55,7 @@ export class Megolm {
         for (let i = 0; i < MEGOLM_RATCHET_PARTS; i++) {
             const part = new Uint8Array(MEGOLM_RATCHET_PART_LENGTH);
 
-            data.push(window.crypto.getRandomValues(part));
+            data.push(crypto.getRandomValues(part));
         }
 
         return {
@@ -218,7 +220,7 @@ export class Megolm {
             await this._updateKeys();
         }
 
-        return window.crypto.subtle.encrypt(
+        return crypto.subtle.encrypt(
             {
                 name: 'AES-CBC',
                 iv: this._keys!.aesIv
@@ -235,13 +237,9 @@ export class Megolm {
             await this._updateKeys();
         }
 
-        return window.crypto.subtle.decrypt(
-            {
-                name: 'AES-CBC',
-                iv: this._keys!.aesIv
-            },
-            this._keys!.aesKey,
-            data);
+        const decipher = crypto.createDecipheriv("aes-256-cbc", this._keys!.aesKey, this._keys!.aesIv);
+
+        return Buffer.concat([decipher.update(data), decipher.final()]);
     }
 
     /**
@@ -252,7 +250,7 @@ export class Megolm {
             await this._updateKeys();
         }
 
-        return window.crypto.subtle.sign('HMAC', this._keys!.macKey, data);
+        return crypto.subtle.sign('HMAC', this._keys!.macKey, data);
     }
 
     /**
@@ -263,7 +261,7 @@ export class Megolm {
             await this._updateKeys();
         }
 
-        return window.crypto.subtle.verify('HMAC', this._keys!.macKey, signature, data);
+        return crypto.subtle.verify('HMAC', this._keys!.macKey, signature, data);
     }
 
     /**
@@ -323,11 +321,11 @@ export class Megolm {
         const bytes = new Uint8Array([ ...data[0], ...data[1], ...data[2], ...data[3] ]);
 
         // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey
-        const material = await window.crypto.subtle.importKey('raw', bytes,
+        const material = await crypto.subtle.importKey('raw', bytes,
             'HKDF', false, [ 'deriveBits' ]);
 
         // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits
-        return window.crypto.subtle.deriveBits({
+        return crypto.subtle.deriveBits({
             name: 'HKDF',
             hash: 'SHA-256',
             salt: new Uint8Array(32),
@@ -343,7 +341,7 @@ export class Megolm {
     private async _rehashPart(fromPart: number, toPart: number): Promise<void> {
         const keyBytes = this._state.data[fromPart];
 
-        const material = await window.crypto.subtle.importKey(
+        const material = await crypto.subtle.importKey(
             'raw',
             keyBytes,
             {
@@ -354,7 +352,7 @@ export class Megolm {
             [ 'sign' ]
         );
 
-        const result = await window.crypto.subtle.sign(
+        const result = await crypto.subtle.sign(
             'HMAC',
             material,
             HASH_KEY_SEEDS[toPart]);
@@ -373,7 +371,7 @@ export class Megolm {
         const macKeyBytes = bytes.subarray(32, 64); // 32 bytes
         const aesIv = bytes.subarray(64, 80); // 16 bytes
 
-        const aesKey = await window.crypto.subtle.importKey(
+        const aesKey = await crypto.subtle.importKey(
             'raw',
             aesKeyBytes,
             'AES-CBC',
@@ -381,7 +379,7 @@ export class Megolm {
             [ 'encrypt', 'decrypt' ]
         );
 
-        const macKey = await window.crypto.subtle.importKey(
+        const macKey = await crypto.subtle.importKey(
             'raw',
             macKeyBytes,
             {
